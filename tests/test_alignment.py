@@ -1,4 +1,5 @@
 import deimos
+import pandas as pd
 import pytest
 
 from tests import localfile
@@ -152,6 +153,32 @@ def test_tolerance_return_none(ms1_peaks):
 
     assert a_ is None
     assert b_ is None
+
+
+def test_merge_features_pass_none():
+    result = deimos.alignment.merge_features(
+        None,
+        dims=["mz"],
+        tol=[5e-6],
+        relative=[True],
+    )
+
+    assert result is None
+
+
+def test_merge_features_empty():
+    empty_df = pd.DataFrame(columns=["mz", "intensity"])
+
+    result = deimos.alignment.merge_features(
+        empty_df,
+        dims=["mz"],
+        tol=[5e-6],
+        relative=[True],
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 0
+    assert list(result.columns) == ["mz", "intensity"]
 
 
 def test_fit_spline():
