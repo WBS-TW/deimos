@@ -12,6 +12,7 @@ dependencies:
   - pandas
   - pip
   - pymzml
+  - pytest
   - pytables
   - python
   - scikit-learn

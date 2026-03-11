@@ -55,7 +55,7 @@ jobs:
         run: |
           which deimos
           deimos --help
-          pytest
+          python -m pytest
   
   Deploy:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
