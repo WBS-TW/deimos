@@ -50,6 +50,40 @@ def twims_data():
         "q": [1, 1, 1, 1, 1],
     }
 
+
+@pytest.fixture()
+def twims_data_3point():
+    """TWIMS-like data with only 3 points (for fallback testing)"""
+    return {
+        "mz": [298.3472, 354.4099, 410.4726],
+        "ta": [399.358, 466.0836, 533.259],
+        "ccs": [190.61, 213.84, 236.4],
+        "q": [1, 1, 1],
+    }
+
+
+@pytest.fixture()
+def twims_data_2point():
+    """TWIMS-like data with only 2 points (insufficient for power)"""
+    return {
+        "mz": [298.3472, 410.4726],
+        "ta": [399.358, 533.259],
+        "ccs": [190.61, 236.4],
+        "q": [1, 1],
+    }
+
+
+@pytest.fixture()
+def twims_data_1point():
+    """TWIMS-like data with only 1 point (insufficient for power)"""
+    return {
+        "mz": [298.3472],
+        "ta": [399.358],
+        "ccs": [190.61],
+        "q": [1],
+    }
+
+
 class TestMassCalibration:
     def test_init(self, ccs_cal):
         for attr, expected in zip(["beta", "tfix", "fit"], [None, None, dict]):
@@ -223,6 +257,49 @@ class TestCCSCalibration:
         error = np.abs(ta - twims_data["ta"]) / twims_data["ta"]
         assert (error <= 0.01).all()
 
+    def test_calibrate_power_3point_fallback(self, ccs_cal, twims_data_3point):
+        """Test 2-parameter power law fallback with only 3 calibration points"""
+        # Test that a warning is raised
+        with pytest.warns(UserWarning, match="Only 3 calibration points available"):
+            ccs_cal.calibrate(power=True, **twims_data_3point)
+        
+        # Verify power mode is enabled
+        assert ccs_cal.power is True
+        
+        # Verify 2-parameter model (a should be 0)
+        assert ccs_cal.a == 0
+        assert ccs_cal.beta is not None
+        assert ccs_cal.tfix is not None
+        
+        # Test forward conversion (arrival time -> CCS)
+        ccs = ccs_cal.arrival2ccs(
+            twims_data_3point["mz"], 
+            twims_data_3point["ta"], 
+            q=twims_data_3point["q"]
+        )
+        error = np.abs(ccs - twims_data_3point["ccs"]) / twims_data_3point["ccs"]
+        assert (error <= 0.05).all()
+        
+        # Verify reverse conversion works (may have lower accuracy)
+        ta = ccs_cal.ccs2arrival(
+            twims_data_3point["mz"], 
+            twims_data_3point["ccs"], 
+            q=twims_data_3point["q"]
+        )
+        # Just verify it returns values in reasonable range
+        assert np.all(ta > 0)
+        assert np.all(np.isfinite(ta))
+
+    def test_calibrate_power_insufficient_points_2(self, ccs_cal, twims_data_2point):
+        """Test that power calibration fails with only 2 points"""
+        with pytest.raises(ValueError, match="at least 3 calibration points"):
+            ccs_cal.calibrate(power=True, **twims_data_2point)
+
+    def test_calibrate_power_insufficient_points_1(self, ccs_cal, twims_data_1point):
+        """Test that power calibration fails with only 1 point"""
+        with pytest.raises(ValueError, match="at least 3 calibration points"):
+            ccs_cal.calibrate(power=True, **twims_data_1point)
+
 
 @pytest.mark.parametrize(
     "calc,beta,tfix,beta_exp,tfix_exp",
@@ -259,3 +336,55 @@ def test_calibrate_ccs_function_power(twims_data):
     ccs = ccs_cal.arrival2ccs(twims_data["mz"], twims_data["ta"], q=twims_data["q"])
     error = np.abs(ccs - twims_data["ccs"]) / twims_data["ccs"]
     assert (error <= 0.01).all()
+
+
+def test_calibrate_ccs_power_3point_fallback(twims_data_3point):
+    """Test 2-parameter power law fallback for TWIMS with only 3 calibration points"""
+    # Test that a warning is raised
+    with pytest.warns(UserWarning, match="Only 3 calibration points available"):
+        ccs_cal = deimos.calibration.calibrate_ccs(power=True, **twims_data_3point)
+    
+    # Verify power mode is enabled
+    assert ccs_cal.power is True
+    
+    # Verify 2-parameter model (a should be 0)
+    assert ccs_cal.a == 0
+    assert ccs_cal.beta is not None
+    assert ccs_cal.tfix is not None
+    
+    # Test forward conversion (arrival time -> CCS)
+    ccs = ccs_cal.arrival2ccs(
+        twims_data_3point["mz"], 
+        twims_data_3point["ta"], 
+        q=twims_data_3point["q"]
+    )
+    error = np.abs(ccs - twims_data_3point["ccs"]) / twims_data_3point["ccs"]
+    # Allow higher tolerance for 3-point fit with 2-parameter model
+    assert (error <= 0.05).all()
+    
+    # Verify fit statistics are available
+    assert ccs_cal.fit["r"] is not None
+    assert ccs_cal.fit["se"] is not None
+    
+    # Verify reverse conversion works (may have lower accuracy)
+    ta = ccs_cal.ccs2arrival(
+        twims_data_3point["mz"], 
+        twims_data_3point["ccs"], 
+        q=twims_data_3point["q"]
+    )
+    # Just verify it returns values in reasonable range
+    assert np.all(ta > 0)
+    assert np.all(np.isfinite(ta))
+
+
+def test_calibrate_ccs_power_insufficient_points_2(twims_data_2point):
+    """Test that power calibration fails with only 2 points"""
+    with pytest.raises(ValueError, match="at least 3 calibration points"):
+        deimos.calibration.calibrate_ccs(power=True, **twims_data_2point)
+
+
+def test_calibrate_ccs_power_insufficient_points_1(twims_data_1point):
+    """Test that power calibration fails with only 1 point"""
+    with pytest.raises(ValueError, match="at least 3 calibration points"):
+        deimos.calibration.calibrate_ccs(power=True, **twims_data_1point)
+
