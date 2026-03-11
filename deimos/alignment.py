@@ -382,6 +382,9 @@ def merge_features(
     if features is None:
         return None
 
+    if len(features.index) == 0:
+        return features
+
     # Safely cast to list
     dims = deimos.utils.safelist(dims)
     tol = deimos.utils.safelist(tol)
