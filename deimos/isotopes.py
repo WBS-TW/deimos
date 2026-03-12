@@ -115,6 +115,11 @@ def detect(
     mz_idx = dims.index("mz")
     else_idx = [i for i, j in enumerate(dims) if i != mz_idx]
 
+    # Sort by m/z to ensure lower indices correspond to lower m/z values.
+    # This is required for the lower-triangular candidate mask logic to correctly
+    # assign parent (lower m/z) and child (higher m/z) features.
+    features = features.sort_values("mz").reset_index(drop=True)
+
     n_features = len(features)
     
     # Step 1: Build candidate mask for non-m/z dimensions
