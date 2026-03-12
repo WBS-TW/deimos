@@ -34,6 +34,66 @@ def test_detect(ms1_peaks):
     assert isotopes["dx"] == [1.003355, 2.00671, 3.010065, 4.01342]
 
 
+def test_detect_return_all_patterns():
+    """Test that return_all_patterns=True preserves overlapping isotope series.
+
+    Simulates a scenario where:
+      - idx 487: low-intensity noise peak at 557.975 Da
+      - idx 490: monoisotopic M peak at 558.312 Da (high intensity)
+      - idx 493: M+1 peak at 558.644 Da (high intensity)
+
+    With the default return_all_patterns=False, idx 490 is both a child of 487
+    and a parent of 493, so the 490→493 pattern is silently dropped.
+    With return_all_patterns=True both patterns are returned so downstream
+    filtering can discard the spurious 487→490 match.
+    """
+    import pandas as pd
+
+    features = pd.DataFrame(
+        {
+            "mz": [557.975, 558.312, 558.644],
+            "drift_time": [285.84, 285.97, 285.93],
+            "intensity": [1870, 831232, 892192],
+        },
+        index=[487, 490, 493],
+    )
+
+    # Default behaviour: child filter applied – only 487→490 survives because
+    # 490 is marked as a child of 487 and therefore removed as a parent.
+    isotopes_default = deimos.isotopes.detect(
+        features,
+        dims=["mz", "drift_time"],
+        tol=[0.02, 1.0],
+        delta=1.003355,
+        max_isotopes=1,
+        max_charge=3,
+        require_lower_intensity=False,
+    )
+    default_parents = set(isotopes_default["idx"].tolist())
+    assert 490 not in default_parents, (
+        "idx 490 should be filtered out as a child with default settings"
+    )
+
+    # return_all_patterns=True: child filter skipped – both patterns returned.
+    isotopes_all = deimos.isotopes.detect(
+        features,
+        dims=["mz", "drift_time"],
+        tol=[0.02, 1.0],
+        delta=1.003355,
+        max_isotopes=1,
+        max_charge=3,
+        require_lower_intensity=False,
+        return_all_patterns=True,
+    )
+    all_parents = set(isotopes_all["idx"].tolist())
+    assert 487 in all_parents, "idx 487→490 pattern should be present"
+    assert 490 in all_parents, "idx 490→493 pattern should be present when return_all_patterns=True"
+
+    # The 490→493 entry should have idx_iso containing 493
+    row_490 = isotopes_all[isotopes_all["idx"] == 490].iloc[0]
+    assert 493 in row_490["idx_iso"], "idx_iso for parent 490 should include child 493"
+
+
 def test_detect_mz_only(ms1_peaks):
     """Test isotope detection with only m/z dimension (single spectrum mode)."""
     # Select features from a single retention time to simulate a single spectrum

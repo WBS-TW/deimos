@@ -18,6 +18,7 @@ def detect(
     max_charge=1,
     max_error=50e-6,
     require_lower_intensity=True,
+    return_all_patterns=False,
 ):
     """
     Perform isotope detection according to expected patterning using optimized
@@ -62,6 +63,15 @@ def detect(
         elements with higher natural abundance (e.g., Fe-54/56 at ~5.8%/91.7%) or enriched
         isotope labeling experiments, set this to False to detect patterns where isotopes
         may have equal or greater intensity than the nominal parent peak.
+    return_all_patterns : bool, default=False
+        If False (default), features that appear as isotope children of another feature
+        are removed from the results so only the top-level parent of each chain is
+        reported. If True, this filter is skipped and all detected parent–isotope pairs
+        are returned, including cases where a feature is simultaneously a child in one
+        pair and a parent in another (overlapping isotope series). This is useful for
+        large molecules where a low-intensity noise peak may incorrectly match as a
+        parent, allowing downstream filtering (e.g., by intensity ratio) to remove
+        invalid patterns.
 
     Returns
     -------
@@ -233,7 +243,8 @@ def detect(
 
     # Remove children (features that are themselves isotopes of other features)
     # This ensures we only report parent features
-    isotopes = isotopes.loc[~isotopes["idx"].isin(isotopes["idx_iso"]), :]
+    if not return_all_patterns:
+        isotopes = isotopes.loc[~isotopes["idx"].isin(isotopes["idx_iso"]), :]
 
     # Step 7: Group isotopes by parent feature
     # OrderedSet preserves insertion order for the list columns
