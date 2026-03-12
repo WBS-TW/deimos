@@ -1,3 +1,4 @@
+import pandas as pd
 import deimos
 import pytest
 
@@ -71,3 +72,35 @@ def test_detect_mz_only(ms1_peaks):
     # Verify error values are within tolerance
     for errors in isotopes["error"]:
         assert all([e <= 50e-6 for e in errors])
+
+
+def test_detect_unsorted_input():
+    """Test that detect() handles unsorted (descending m/z) input correctly."""
+    # Sorted ascending reference
+    features_sorted = pd.DataFrame(
+        {
+            "mz": [557.975, 558.312, 558.644],
+            "drift_time": [285.84, 285.97, 285.93],
+            "intensity": [1870, 831232, 792192],
+        }
+    )
+
+    # Same features but in reverse m/z order
+    features_unsorted = features_sorted.iloc[::-1].reset_index(drop=True)
+
+    kwargs = dict(
+        dims=["mz", "drift_time"],
+        tol=[0.02, 1.0],
+        max_charge=3,
+        max_isotopes=1,
+        max_error=50e-6,
+        require_lower_intensity=False,
+    )
+
+    result_sorted = deimos.isotopes.detect(features_sorted, **kwargs)
+    result_unsorted = deimos.isotopes.detect(features_unsorted, **kwargs)
+
+    # Both orderings must yield the same number of isotopic patterns
+    assert len(result_sorted) == len(result_unsorted)
+    # Patterns found should be consistent (non-empty)
+    assert len(result_sorted) > 0
