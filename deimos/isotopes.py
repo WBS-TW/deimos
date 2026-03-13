@@ -125,6 +125,11 @@ def detect(
     mz_idx = dims.index("mz")
     else_idx = [i for i, j in enumerate(dims) if i != mz_idx]
 
+    # Preserve original indices before sorting
+    # Store original index as a column so we can return it in results
+    features = features.copy()
+    features['original_idx'] = features.index
+    
     # Sort by m/z to ensure lower indices correspond to lower m/z values.
     # This is required for the lower-triangular candidate mask logic to correctly
     # assign parent (lower m/z) and child (higher m/z) features.
@@ -225,8 +230,8 @@ def detect(
         "dx": matched_deltas,
         "mz_iso": mz_values[matched_children],
         "intensity_iso": features["intensity"].values[matched_children],
-        "idx": features.index.values[matched_parents],
-        "idx_iso": features.index.values[matched_children],
+        "idx": features["original_idx"].values[matched_parents],
+        "idx_iso": features["original_idx"].values[matched_children],
     })
 
     # Step 5: Compute quality metrics
