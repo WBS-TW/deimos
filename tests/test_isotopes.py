@@ -164,3 +164,57 @@ def test_detect_unsorted_input():
     assert len(result_sorted) == len(result_unsorted)
     # Patterns found should be consistent (non-empty)
     assert len(result_sorted) > 0
+
+
+def test_detect_preserves_input_indices():
+    """Test that output idx values match the original input DataFrame indices.
+    
+    This is critical when features have non-sequential indices (e.g., after filtering
+    or when passing a subset of data). The function internally sorts by m/z, but must
+    return idx values that correspond to the original input indices, not the sorted order.
+    """
+    # Create features with non-sequential indices to verify they're preserved
+    features = pd.DataFrame(
+        {
+            "mz": [387.024, 388.027, 389.031, 390.034],  # Isotopic pattern
+            "drift_time": [285.5, 285.6, 285.5, 285.6],
+            "retention_time": [12.3, 12.3, 12.3, 12.3],
+            "intensity": [100000, 80000, 50000, 30000],
+        },
+        index=[100, 200, 300, 400],  # Non-sequential original indices
+    )
+    
+    isotopes = deimos.isotopes.detect(
+        features,
+        dims=["mz", "drift_time", "retention_time"],
+        tol=[0.1, 0.3, 0.5],
+        delta=1.003355,
+        max_isotopes=5,
+        max_charge=1,
+        max_error=50e-6,
+    )
+    
+    # Should find the isotopic pattern starting at idx 100
+    assert len(isotopes) > 0
+    
+    # The parent feature should have idx=100 (original index of first feature)
+    parent_row = isotopes.iloc[0]
+    assert parent_row["idx"] == 100, f"Expected parent idx=100, got {parent_row['idx']}"
+    
+    # The isotope indices should be 200, 300, 400 (original indices of isotopes)
+    expected_isotope_indices = [200, 300, 400]
+    actual_isotope_indices = parent_row["idx_iso"]
+    
+    # Check that we found at least some of the isotopes
+    assert len(actual_isotope_indices) > 0
+    
+    # Check that all returned isotope indices are from the original input indices
+    for iso_idx in actual_isotope_indices:
+        assert iso_idx in expected_isotope_indices, (
+            f"Isotope idx {iso_idx} not in expected original indices {expected_isotope_indices}"
+        )
+    
+    # Verify that none of the indices are the sorted positions (0, 1, 2, 3)
+    all_indices = [parent_row["idx"]] + parent_row["idx_iso"]
+    for idx in all_indices:
+        assert idx >= 100, f"Index {idx} appears to be a sorted position, not original index"
