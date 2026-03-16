@@ -524,14 +524,29 @@ def sparse_weighted_mean_filter(idx, V, w, radius=[1, 1, 1], pindex=None):
 
     """
 
-    # Copy indices
-    idx = idx.copy().astype(w.dtype)
+    # Reshape V if 1D
+    if V.ndim == 1:
+        V = V.reshape((-1, 1))
+
+    # Compute spacing-preserving grid indices from actual coordinate values.
+    # This effectively zero-fills the sparse grid so that index distances
+    # reflect actual coordinate distances, preventing the weighted mean from
+    # bridging across large gaps where no data exists.
+    grid_idx = np.empty(V.shape, dtype=w.dtype)
+    for i in range(V.shape[1]):
+        col = V[:, i]
+        unique_sorted = np.unique(col)
+        if len(unique_sorted) > 1:
+            min_step = np.min(np.diff(unique_sorted))
+            grid_idx[:, i] = np.round((col - unique_sorted[0]) / min_step)
+        else:
+            grid_idx[:, i] = 0.0
 
     # Scale
     for i, r in enumerate(radius):
         # Increase inter-index distance
         if r < 1:
-            idx[:, i] *= 2
+            grid_idx[:, i] *= 2
 
         # Do nothing
         elif r == 1:
@@ -539,15 +554,15 @@ def sparse_weighted_mean_filter(idx, V, w, radius=[1, 1, 1], pindex=None):
 
         # Decrease inter-index distance
         else:
-            idx[:, i] /= r
+            grid_idx[:, i] /= r
 
     # If not supplied, index is all points
     if pindex is None:
-        pindex = np.arange(len(idx))
+        pindex = np.arange(len(grid_idx))
 
     # Connectivity matrix
-    tree_all = KDTree(idx)
-    tree_subset = KDTree(idx[pindex])
+    tree_all = KDTree(grid_idx)
+    tree_subset = KDTree(grid_idx[pindex])
     cmat = tree_subset.sparse_distance_matrix(
         tree_all, 1, p=np.inf, output_type="coo_matrix"
     )
@@ -569,10 +584,6 @@ def sparse_weighted_mean_filter(idx, V, w, radius=[1, 1, 1], pindex=None):
     V_count = sparse.bsr_matrix(
         (w[J], (I, I)), shape=cmat_shape, dtype=w.dtype
     ).diagonal(0)
-
-    # Reshape V if 1D
-    if V.ndim == 1:
-        V = V.reshape((-1, 1))
 
     # Output container
     V_out = np.empty_like(V[pindex, :], dtype=w.dtype)
